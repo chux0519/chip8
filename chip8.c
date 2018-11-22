@@ -4,8 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Defs
-
+// Definations
 #define MEM_SIZE 4096
 #define REGISTER_SIZE 16
 #define STACK_SIZE 16
@@ -14,6 +13,29 @@
 #define HEIGHT 32
 #define TIMES 8
 
+// For allocating memory
+void *xmalloc(size_t size) {
+  void *mem = (void *)malloc(size);
+  if (mem == NULL) {
+    fprintf(stderr, "fatal: memory exhausted (xmalloc of %zu bytes).\n", size);
+    exit(-1);
+  }
+  return mem;
+}
+
+// Audio & Video
+typedef struct chip8_av {
+  SDL_Renderer **renderer;
+  SDL_Window **window;
+} chip8_av;
+
+void av_init(chip8_av *av, SDL_Window **window, SDL_Renderer **renderer);
+void av_clear_screen(chip8_av *av);
+void av_beep(chip8_av *av);
+void av_draw_pixels(chip8_av *av, const unsigned char *pixels);
+void av_destroy(chip8_av *av);
+
+// The Chip8
 typedef struct chip8 {
   unsigned char *memory;     // 4k
   unsigned char *registers;  // 16
@@ -26,12 +48,11 @@ typedef struct chip8 {
   unsigned short sp;      // Stack Pointer
   unsigned char *keyboard;
   unsigned char *pixels;  // Pixel buffer for sdl
-  void (*beep)();
-  int should_update;
+  chip8_av *av;           // For graphics and sound
 } chip8;
 
 // Initiate memory and registers
-void chip8_init(chip8 *chip, void (*beep)());
+void chip8_init(chip8 *chip, chip8_av *av);
 
 // Load ROM
 int chip8_load_rom(chip8 *chip, const char *rom);
@@ -39,23 +60,11 @@ int chip8_load_rom(chip8 *chip, const char *rom);
 // Process CPU cycle
 void chip8_process_cyle(chip8 *chip);
 
+// Desctroy chip8
 void chip8_destroy(chip8 *chip);
 
-// Utils
-void *xmalloc(size_t size);
-
 // Implementation
-
-void *xmalloc(size_t size) {
-  void *mem = (void *)malloc(size);
-  if (mem == NULL) {
-    fprintf(stderr, "fatal: memory exhausted (xmalloc of %zu bytes).\n", size);
-    exit(-1);
-  }
-  return mem;
-}
-
-void chip8_init(chip8 *chip, void (*beep)()) {
+void chip8_init(chip8 *chip, chip8_av *av) {
   chip->memory = (unsigned char *)xmalloc(sizeof(unsigned char) * MEM_SIZE);
   chip->registers =
       (unsigned char *)xmalloc(sizeof(unsigned char) * REGISTER_SIZE);
@@ -70,8 +79,9 @@ void chip8_init(chip8 *chip, void (*beep)()) {
       (unsigned char *)xmalloc(sizeof(unsigned char) * KEYBOARD_SIZE);
   chip->pixels =
       (unsigned char *)xmalloc(sizeof(unsigned char) * WIDTH * HEIGHT);
-  chip->beep = beep;
-  chip->should_update = 0;
+  chip->av = av;
+
+  // Reset states
   for (int i = 0; i < MEM_SIZE; ++i) chip->memory[i] = 0;
   for (int i = 0; i < REGISTER_SIZE; ++i) chip->registers[i] = 0;
   for (int i = 0; i < STACK_SIZE; ++i) chip->stack[i] = 0;
@@ -104,12 +114,95 @@ void chip8_process_cyle(chip8 *chip) {
   chip->opcode = chip->memory[chip->pc] << 8 | chip->memory[chip->pc + 1];
   const unsigned short opcode = chip->opcode;
   printf("opcode: 0x%X\n", opcode);
-  // TODO: parse opcode here
+  // Parse opcode here
+  // For more infomation, see https://www.wikiwand.com/en/CHIP-8
+  unsigned short nnn = opcode & 0x0FFF;
+  unsigned short nn = opcode & 0x00FF;
+  unsigned short n = opcode & 0x000F;
+  unsigned short x = (opcode & 0x0F00) >> 8;
+  unsigned short y = (opcode & 0x00F0) >> 4;
+
+  switch (opcode & 0xF000) {
+    case 0x0000: {
+      switch (opcode) {
+        case 0x00E0:
+          // Clear pixels in chip
+          for (int i = 0; i < WIDTH * HEIGHT; ++i) chip->pixels[i] = 0;
+          // SDL clear
+          av_clear_screen(chip->av);
+          chip->pc += 2;
+          break;
+        case 0x00EE:
+          --chip->sp;
+          chip->pc = chip->stack[chip->sp];
+          chip->pc += 2;
+          break;
+        default:
+          printf("Opcode 0x%X is not supported.\n", opcode);
+      }
+      break;
+    }
+    case 0x1000: {
+      chip->pc = nnn;
+      break;
+    }
+    case 0x2000: {
+      chip->stack[chip->sp] = chip->pc;
+      ++chip->sp;
+      chip->pc = nnn;
+      break;
+    }
+    case 0x3000: {
+      if (chip->registers[x] == nn) chip->pc += 2;
+      chip->pc += 2;
+      break;
+    }
+    case 0x4000: {
+      if (chip->registers[x] != nn) chip->pc += 2;
+      chip->pc += 2;
+      break;
+    }
+    case 0x5000: {
+      if (chip->registers[x] == chip->registers[y]) chip->pc += 2;
+      chip->pc += 2;
+      break;
+    }
+    case 0x6000: {
+      chip->registers[x] = nn;
+      chip->pc += 2;
+      break;
+    }
+    case 0x7000: {
+      chip->registers[x] += nn;
+      chip->pc += 2;
+      break;
+    }
+    case 0x8000: {
+      switch(n) {
+        // TODO: 0 1 2 3 4 5 6 7 E
+      }
+      break;
+    }
+    case 0x9000: {
+    }
+    case 0xA000: {
+    }
+    case 0xB000: {
+    }
+    case 0xC000: {
+    }
+    case 0xD000: {
+    }
+    case 0xE000: {
+    }
+    case 0xF000: {
+    }
+  }
   // Update timers
   if (chip->delay_timer > 0) --chip->delay_timer;
 
   if (chip->sound_timer > 0) {
-    if (chip->sound_timer == 1) chip->beep();
+    if (chip->sound_timer == 1) av_beep(chip->av);
     --chip->sound_timer;
   }
 }
@@ -123,46 +216,49 @@ void chip8_destroy(chip8 *chip) {
 }
 
 // SDL stuff
-void sdl_init_context(SDL_Window **window, SDL_Renderer **renderer) {
+void av_init(chip8_av *av, SDL_Window **window, SDL_Renderer **renderer) {
   SDL_Init(SDL_INIT_VIDEO);
   SDL_CreateWindowAndRenderer(WIDTH * TIMES, HEIGHT * TIMES, 0, window,
                               renderer);
+  av->window = window;
+  av->renderer = renderer;
 }
 
-void sdl_clear(SDL_Renderer *renderer) {
-  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-  SDL_RenderClear(renderer);
+void av_clear_screen(chip8_av *av) {
+  SDL_SetRenderDrawColor(*av->renderer, 0, 0, 0, 0);
+  SDL_RenderClear(*av->renderer);
 }
 
-void sdl_draw_pixels(SDL_Renderer *renderer, const unsigned char *pixels) {
+void av_beep(chip8_av *av) { printf("Beep.\n"); }
+
+void av_draw_pixels(chip8_av *av, const unsigned char *pixels) {
   SDL_Rect r;
   for (int row = 0; row < HEIGHT; ++row) {
     for (int col = 0; col < WIDTH; ++col) {
       int index = row * WIDTH + col;
       if (pixels[index]) {
         // Draw white
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_SetRenderDrawColor(*av->renderer, 255, 255, 255, 255);
       } else {
         // Draw black
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_SetRenderDrawColor(*av->renderer, 0, 0, 0, 255);
       }
       r.x = col * TIMES;
       r.y = row * TIMES;
       r.w = TIMES;
       r.h = TIMES;
-      SDL_RenderFillRect(renderer, &r);
+      SDL_RenderFillRect(*av->renderer, &r);
     }
   }
-  SDL_RenderPresent(renderer);
+  SDL_RenderPresent(*av->renderer);
 }
 
-void sdl_destroy_context(SDL_Window **window, SDL_Renderer **renderer) {
-  SDL_DestroyRenderer(*renderer);
-  SDL_DestroyWindow(*window);
+void av_destroy(chip8_av *av) {
+  SDL_DestroyRenderer(*av->renderer);
+  SDL_DestroyWindow(*av->window);
   SDL_Quit();
 }
 
-void beep() { printf("Beep\n"); }
 int main(int argc, char **argv) {
   if (argc < 2) {
     printf("Usage: chip8 xxx.rom\n");
@@ -172,24 +268,20 @@ int main(int argc, char **argv) {
   SDL_Renderer *renderer;
   SDL_Window *window;
 
-  chip8 *chip = (chip8 *)xmalloc(sizeof(chip8));
+  chip8_av av;
+  av_init(&av, &window, &renderer);
+  av_clear_screen(&av);
 
-  chip8_init(chip, beep);
-  chip8_load_rom(chip, argv[1]);
-
-  sdl_init_context(&window, &renderer);
-  sdl_clear(renderer);
+  chip8 chip;
+  chip8_init(&chip, &av);
+  chip8_load_rom(&chip, argv[1]);
 
   while (1) {
     if (SDL_PollEvent(&event) && event.type == SDL_QUIT) break;
-    chip8_process_cyle(chip);
-    if (chip->should_update) {
-      sdl_draw_pixels(renderer, chip->pixels);
-      chip->should_update = 0;
-    }
+    chip8_process_cyle(&chip);
   }
 
-  sdl_destroy_context(&window, &renderer);
-  chip8_destroy(chip);
+  chip8_destroy(&chip);
+  av_destroy(&av);
   return EXIT_SUCCESS;
 }
