@@ -14,6 +14,25 @@
 #define HEIGHT 32
 #define TIMES 8
 
+const unsigned char fonts[80] = {
+    0xF0, 0x90, 0x90, 0x90, 0xF0,  // 0
+    0x20, 0x60, 0x20, 0x20, 0x70,  // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0,  // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0,  // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10,  // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0,  // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0,  // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40,  // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0,  // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0,  // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90,  // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0,  // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0,  // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0,  // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0,  // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80   // F
+};
+
 // For allocating memory
 void *xmalloc(size_t size) {
   void *mem = (void *)malloc(size);
@@ -60,7 +79,7 @@ typedef struct chip8 {
 void chip8_init(chip8 *chip, chip8_av *av);
 
 // Load ROM
-int chip8_load_rom(chip8 *chip, const char *rom);
+void chip8_load_rom(chip8 *chip, const char *rom);
 
 // Process CPU cycle
 void chip8_process_cyle(chip8 *chip);
@@ -93,14 +112,17 @@ void chip8_init(chip8 *chip, chip8_av *av) {
   for (int i = 0; i < STACK_SIZE; ++i) chip->stack[i] = 0;
   for (int i = 0; i < KEYBOARD_SIZE; ++i) chip->keyboard[i] = 0;
   for (int i = 0; i < WIDTH * HEIGHT; ++i) chip->pixels[i] = 0;  // 0 for black
+
+  // Load fonts
+  for (int i = 0; i < 80; ++i) chip->memory[i] = fonts[i];
 }
 
-int chip8_load_rom(chip8 *chip, const char *rom) {
+void chip8_load_rom(chip8 *chip, const char *rom) {
   FILE *f = NULL;
   f = fopen(rom, "rb");
   if (f == NULL) {
     fprintf(stderr, "Error to load %s: %s", rom, strerror(errno));
-    return -1;
+    exit(-1);
   }
   fseek(f, 0, SEEK_END);
   long file_size = ftell(f);
@@ -111,15 +133,13 @@ int chip8_load_rom(chip8 *chip, const char *rom) {
     for (int i = 0; i < bytes; ++i) {
       chip->memory[i + 512] = buf[i];
     }
-    return 0;
   }
-  return -1;
 }
 
 void chip8_process_cyle(chip8 *chip) {
   chip->opcode = chip->memory[chip->pc] << 8 | chip->memory[chip->pc + 1];
   const unsigned short opcode = chip->opcode;
-  printf("opcode: 0x%X\n", opcode);
+  // printf("opcode: 0x%X\n", opcode);
   // Parse opcode here
   // For more infomation, see https://www.wikiwand.com/en/CHIP-8
   unsigned short nnn = opcode & 0x0FFF;
@@ -261,17 +281,114 @@ void chip8_process_cyle(chip8 *chip) {
       break;
     }
     case 0xD000: {
-      // TODO: draw
       unsigned char pix;
-      for(int h = 0; h < n; ++h) {
-        pix = chip->memory[chip->ir + h]; // 8 bit width
-        size_t idx = y * WIDTH + x;
-        unsigned char mask = 0x80; // 0b10000000
+      x = chip->registers[x];
+      y = chip->registers[y];
+      for (int h = 0; h < n; ++h) {
+        pix = chip->memory[chip->ir + h];  // 8 bit width
+        size_t idx = (y + h) * WIDTH + x;
+        unsigned char mask = 0x80;  // 0b10000000
+        for (int pos = 0; pos < 8; ++pos) {
+          mask >>= pos;
+          unsigned char p = pix & mask;
+          if (chip->pixels[idx + pos] && (chip->pixels[idx + pos] ^ p) == 0)
+            chip->registers[0xF] = 1;  // Flip from set to unset
+          else
+            chip->registers[0xF] = 0;
+          // Use XOR to set pix
+          // For more infomation see
+          // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#Dxyn
+          chip->pixels[idx + pos] ^= p;
+        }
       }
+      av_draw_pixels(chip->av, chip->pixels);
+      chip->pc += 2;
+      break;
     }
     case 0xE000: {
+      unsigned short key_index;
+      unsigned char key;
+      switch (nn) {
+        case 0x9E:
+          key_index = chip->registers[x];
+          key = chip->keyboard[key_index];
+          if (key != 0) chip->pc += 2;
+          chip->pc += 2;
+          break;
+        case 0xA1:
+          key_index = chip->registers[x];
+          key = chip->keyboard[key_index];
+          if (key == 0) chip->pc += 2;
+          chip->pc += 2;
+          break;
+        default:
+          log_unsupported_opcode(opcode);
+      }
+      break;
     }
     case 0xF000: {
+      unsigned short pressed;
+      unsigned char bcd;
+      switch (nn) {
+        case 0x07:
+          chip->registers[x] = chip->delay_timer;
+          chip->pc += 2;
+          break;
+        case 0x0A:
+          pressed = 0;
+          for (int i = 0; i < 16; ++i) {
+            if (chip->keyboard[i]) {
+              pressed = 1;
+              chip->registers[x] = i;
+            }
+          }
+          if (pressed == 0)
+            return;  // Return and will be called again in game loop
+          chip->pc += 2;
+          break;
+        case 0x15:
+          chip->delay_timer = chip->registers[x];
+          chip->pc += 2;
+          break;
+        case 0x18:
+          chip->sound_timer = chip->registers[x];
+          chip->pc += 2;
+          break;
+        case 0x1E:
+          if (chip->ir + chip->registers[x] > 0xFFF)
+            chip->registers[0xF] = 1;
+          else
+            chip->registers[0xF] = 0;
+          chip->ir += chip->registers[x];
+          chip->pc += 2;
+          break;
+        case 0x29:
+          chip->ir =
+              chip->registers[x] * 5;  // Fonts loaded from 0x00 to 0xF * 5
+          chip->pc += 2;
+          break;
+        case 0x33:
+          bcd = chip->registers[x];
+          chip->memory[chip->ir] = bcd / 100;
+          chip->memory[chip->ir + 1] = (bcd - bcd / 100) / 10;
+          chip->memory[chip->ir + 2] = bcd % 10;
+          chip->pc += 2;
+          break;
+        case 0x55:
+          for (int i = 0; i <= x; ++i) {
+            chip->memory[chip->ir + i] = chip->registers[i];
+          }
+          chip->pc += 2;
+          break;
+        case 0x65:
+          for (int i = 0; i <= x; ++i) {
+            chip->registers[i] = chip->memory[chip->ir + i];
+          }
+          chip->pc += 2;
+          break;
+        default:
+          log_unsupported_opcode(opcode);
+      }
     }
   }
   // Update timers
