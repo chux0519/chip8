@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 // Definations
 #define MEM_SIZE 4096
@@ -21,6 +22,10 @@ void *xmalloc(size_t size) {
     exit(-1);
   }
   return mem;
+}
+
+void log_unsupported_opcode(const short opcode) {
+  printf("Opcode 0x%X is not supported.\n", opcode);
 }
 
 // Audio & Video
@@ -65,6 +70,7 @@ void chip8_destroy(chip8 *chip);
 
 // Implementation
 void chip8_init(chip8 *chip, chip8_av *av) {
+  srand(time(0));
   chip->memory = (unsigned char *)xmalloc(sizeof(unsigned char) * MEM_SIZE);
   chip->registers =
       (unsigned char *)xmalloc(sizeof(unsigned char) * REGISTER_SIZE);
@@ -138,7 +144,7 @@ void chip8_process_cyle(chip8 *chip) {
           chip->pc += 2;
           break;
         default:
-          printf("Opcode 0x%X is not supported.\n", opcode);
+          log_unsupported_opcode(opcode);
       }
       break;
     }
@@ -178,20 +184,90 @@ void chip8_process_cyle(chip8 *chip) {
       break;
     }
     case 0x8000: {
-      switch(n) {
-        // TODO: 0 1 2 3 4 5 6 7 E
+      switch (n) {
+        case 0:
+          chip->registers[x] = chip->registers[y];
+          chip->pc += 2;
+          break;
+        case 1:
+          chip->registers[x] |= chip->registers[y];
+          chip->pc += 2;
+          break;
+        case 2:
+          chip->registers[x] &= chip->registers[y];
+          chip->pc += 2;
+          break;
+        case 3:
+          chip->registers[x] ^= chip->registers[y];
+          chip->pc += 2;
+          break;
+        case 4:
+          if (0xFF - chip->registers[x] >= chip->registers[y])
+            chip->registers[0xF] = 0;  // No carry
+          else
+            chip->registers[0xF] = 1;
+          chip->registers[x] += chip->registers[y];
+          chip->pc += 2;
+          break;
+        case 5:
+          if (chip->registers[x] >= chip->registers[y])
+            chip->registers[0xF] = 1;  // No borrow
+          else
+            chip->registers[0xF] = 0;  // Borrow here
+          chip->registers[x] -= chip->registers[y];
+          chip->pc += 2;
+          break;
+        case 6:
+          chip->registers[0xF] = chip->registers[x] & 0x1;
+          chip->registers[x] >>= 1;
+          chip->pc += 2;
+          break;
+        case 7:
+          if (chip->registers[y] >= chip->registers[x])
+            chip->registers[0xF] = 1;  // No borrow
+          else
+            chip->registers[0xF] = 0;
+          chip->registers[x] = chip->registers[y] - chip->registers[x];
+          chip->pc += 2;
+          break;
+        case 0xE:
+          chip->registers[0xF] = chip->registers[x] >> 7;
+          chip->registers[x] <<= 1;
+          chip->pc += 2;
+          break;
+        default:
+          log_unsupported_opcode(opcode);
       }
       break;
     }
     case 0x9000: {
+      if (chip->registers[x] != chip->registers[y]) chip->pc += 2;
+      chip->pc += 2;
+      break;
     }
     case 0xA000: {
+      chip->ir = nnn;
+      chip->pc += 2;
+      break;
     }
     case 0xB000: {
+      chip->pc = chip->registers[0] + nnn;
+      break;
     }
     case 0xC000: {
+      unsigned short r = rand() % 0xFF;
+      chip->registers[x] = r & nn;
+      chip->pc += 2;
+      break;
     }
     case 0xD000: {
+      // TODO: draw
+      unsigned char pix;
+      for(int h = 0; h < n; ++h) {
+        pix = chip->memory[chip->ir + h]; // 8 bit width
+        size_t idx = y * WIDTH + x;
+        unsigned char mask = 0x80; // 0b10000000
+      }
     }
     case 0xE000: {
     }
