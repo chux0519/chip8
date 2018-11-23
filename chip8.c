@@ -13,6 +13,7 @@
 #define WIDTH 64
 #define HEIGHT 32
 #define TIMES 8
+#define FREQUENCY 60  // 60 hertz
 
 const unsigned char fonts[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0,  // 0
@@ -452,6 +453,66 @@ void av_destroy(chip8_av *av) {
   SDL_Quit();
 }
 
+void chip8_key_change(chip8 *chip, SDL_Keycode code, unsigned char v) {
+  switch (code) {
+    case SDLK_1:
+      chip->keyboard[0x1] = v;
+      break;
+    case SDLK_2:
+      chip->keyboard[0x2] = v;
+      break;
+    case SDLK_3:
+      chip->keyboard[0x3] = v;
+      break;
+    case SDLK_4:
+      chip->keyboard[0xC] = v;
+      break;
+    case SDLK_q:
+      chip->keyboard[0x4] = v;
+      break;
+    case SDLK_w:
+      chip->keyboard[0x5] = v;
+      break;
+    case SDLK_e:
+      chip->keyboard[0x6] = v;
+      break;
+    case SDLK_r:
+      chip->keyboard[0xD] = v;
+      break;
+    case SDLK_a:
+      chip->keyboard[0x7] = v;
+      break;
+    case SDLK_s:
+      chip->keyboard[0x8] = v;
+      break;
+    case SDLK_d:
+      chip->keyboard[0x9] = v;
+      break;
+    case SDLK_f:
+      chip->keyboard[0xE] = v;
+      break;
+    case SDLK_z:
+      chip->keyboard[0xA] = v;
+      break;
+    case SDLK_x:
+      chip->keyboard[0x0] = v;
+      break;
+    case SDLK_c:
+      chip->keyboard[0xB] = v;
+      break;
+    case SDLK_v:
+      chip->keyboard[0xF] = v;
+      break;
+    default:
+      break;
+  }
+}
+void chip8_keydown(chip8 *chip, SDL_Keycode code) {
+  chip8_key_change(chip, code, 1);
+}
+void chip8_keyup(chip8 *chip, SDL_Keycode code) {
+  chip8_key_change(chip, code, 0);
+}
 int main(int argc, char **argv) {
   if (argc < 2) {
     printf("Usage: chip8 xxx.rom\n");
@@ -469,11 +530,32 @@ int main(int argc, char **argv) {
   chip8_init(&chip, &av);
   chip8_load_rom(&chip, argv[1]);
 
+  unsigned int lastTime = 0, currentTime;
   while (1) {
-    if (SDL_PollEvent(&event) && event.type == SDL_QUIT) break;
+    currentTime = SDL_GetTicks();
+    if (currentTime < lastTime + 1000 / FREQUENCY) {
+      SDL_Delay(lastTime + 1000 / FREQUENCY - currentTime);
+    }
+    while (SDL_PollEvent(&event)) {
+      switch (event.type) {
+        case SDL_QUIT:
+          goto quit; // Quit outer while
+        case SDL_KEYDOWN:
+          chip8_keydown(&chip, event.key.keysym.sym);
+          break;
+        case SDL_KEYUP:
+          chip8_keyup(&chip, event.key.keysym.sym);
+          break;
+        default:
+          break;
+      }
+    }
+
     chip8_process_cyle(&chip);
+    lastTime = currentTime;
   }
 
+quit:
   chip8_destroy(&chip);
   av_destroy(&av);
   return EXIT_SUCCESS;
