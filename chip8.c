@@ -285,17 +285,17 @@ void chip8_process_cyle(chip8 *chip) {
       unsigned char pix;
       x = chip->registers[x];
       y = chip->registers[y];
+      chip->registers[0xF] = 0;
       for (int h = 0; h < n; ++h) {
         pix = chip->memory[chip->ir + h];  // 8 bit width
         size_t idx = (y + h) * WIDTH + x;
         unsigned char mask = 0x80;  // 0b10000000
         for (int pos = 0; pos < 8; ++pos) {
           mask >>= pos;
-          unsigned char p = pix & mask;
+          // Set p to 1 if not 0
+          unsigned char p = (pix & mask) != 0;
           if (chip->pixels[idx + pos] && (chip->pixels[idx + pos] ^ p) == 0)
             chip->registers[0xF] = 1;  // Flip from set to unset
-          else
-            chip->registers[0xF] = 0;
           // Use XOR to set pix
           // For more infomation see
           // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#Dxyn
@@ -539,7 +539,7 @@ int main(int argc, char **argv) {
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
         case SDL_QUIT:
-          goto quit; // Quit outer while
+          goto quit;  // Quit outer while
         case SDL_KEYDOWN:
           chip8_keydown(&chip, event.key.keysym.sym);
           break;
