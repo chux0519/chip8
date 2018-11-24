@@ -14,6 +14,7 @@
 #define HEIGHT 32
 #define TIMES 8
 #define FREQUENCY 60  // 60 hertz
+#define FPS 30
 
 const unsigned char fonts[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0,  // 0
@@ -52,9 +53,11 @@ void log_unsupported_opcode(const short opcode) {
 typedef struct chip8_av {
   SDL_Renderer **renderer;
   SDL_Window **window;
+  SDL_Event *event;
 } chip8_av;
 
-void av_init(chip8_av *av, SDL_Window **window, SDL_Renderer **renderer);
+void av_init(chip8_av *av, SDL_Window **window, SDL_Renderer **renderer,
+             SDL_Event *event);
 void av_clear_screen(chip8_av *av);
 void av_beep(chip8_av *av);
 void av_draw_pixels(chip8_av *av, const unsigned char *pixels);
@@ -302,7 +305,7 @@ void chip8_process_cyle(chip8 *chip) {
           chip->pixels[idx + pos] ^= p;
         }
       }
-      av_draw_pixels(chip->av, chip->pixels);
+      // Draw in another timer
       chip->pc += 2;
       break;
     }
@@ -410,12 +413,14 @@ void chip8_destroy(chip8 *chip) {
 }
 
 // SDL stuff
-void av_init(chip8_av *av, SDL_Window **window, SDL_Renderer **renderer) {
+void av_init(chip8_av *av, SDL_Window **window, SDL_Renderer **renderer,
+             SDL_Event *event) {
   SDL_Init(SDL_INIT_VIDEO);
   SDL_CreateWindowAndRenderer(WIDTH * TIMES, HEIGHT * TIMES, 0, window,
                               renderer);
   av->window = window;
   av->renderer = renderer;
+  av->event = event;
 }
 
 void av_clear_screen(chip8_av *av) {
@@ -513,6 +518,19 @@ void chip8_keydown(chip8 *chip, SDL_Keycode code) {
 void chip8_keyup(chip8 *chip, SDL_Keycode code) {
   chip8_key_change(chip, code, 0);
 }
+
+unsigned int render(unsigned int interval, void *chip) {
+  chip8 *c = (chip8 *)(chip);
+  av_draw_pixels(c->av, c->pixels);
+  return interval;
+}
+
+unsigned int process(unsigned int interval, void *chip) {
+  chip8 *c = (chip8 *)(chip);
+  chip8_process_cyle(c);
+  return interval;
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     printf("Usage: chip8 xxx.rom\n");
@@ -523,38 +541,34 @@ int main(int argc, char **argv) {
   SDL_Window *window;
 
   chip8_av av;
-  av_init(&av, &window, &renderer);
+  av_init(&av, &window, &renderer, &event);
   av_clear_screen(&av);
 
   chip8 chip;
   chip8_init(&chip, &av);
   chip8_load_rom(&chip, argv[1]);
 
-  unsigned int lastTime = 0, currentTime;
+  SDL_TimerID render_timer = SDL_AddTimer(1000 / FPS, render, &chip);
+  SDL_TimerID process_timer = SDL_AddTimer(1000 / FREQUENCY, process, &chip);
+
   while (1) {
-    currentTime = SDL_GetTicks();
-    if (currentTime < lastTime + 1000 / FREQUENCY) {
-      SDL_Delay(lastTime + 1000 / FREQUENCY - currentTime);
-    }
-    while (SDL_PollEvent(&event)) {
-      switch (event.type) {
+    SDL_Event *e = &event;
+    while (SDL_PollEvent(e)) {
+      switch (e->type) {
         case SDL_QUIT:
-          goto quit;  // Quit outer while
+          goto quit;
         case SDL_KEYDOWN:
-          chip8_keydown(&chip, event.key.keysym.sym);
+          chip8_keydown(&chip, e->key.keysym.sym);
           break;
         case SDL_KEYUP:
-          chip8_keyup(&chip, event.key.keysym.sym);
+          chip8_keyup(&chip, e->key.keysym.sym);
           break;
         default:
           break;
       }
     }
-
-    chip8_process_cyle(&chip);
-    lastTime = currentTime;
+    SDL_Delay(1000 / FPS);
   }
-
 quit:
   chip8_destroy(&chip);
   av_destroy(&av);
