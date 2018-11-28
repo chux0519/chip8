@@ -30,7 +30,7 @@ static const unsigned char fonts[80] = {
 };
 
 typedef struct chip8 {
-unsigned char *memory;     // 4k
+  unsigned char *memory;     // 4k
   unsigned char *registers;  // 16
   unsigned short opcode;
   unsigned short ir;  // Index Register
@@ -43,6 +43,9 @@ unsigned char *memory;     // 4k
   unsigned char *pixels;  // Pixel buffer, 0 for black, 1 for white
 } chip8;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 // Initiate memory and registers
 void chip8_init(chip8 *chip);
 
@@ -54,5 +57,9 @@ void chip8_step(chip8 *chip);
 
 // Desctroy chip8
 void chip8_destroy(chip8 *chip);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
