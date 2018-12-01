@@ -10,21 +10,21 @@
 #endif
 
 // Audio & Video
-typedef struct chip8_sdl {
+typedef struct chip8_sdl_s {
   SDL_Renderer **renderer;
   SDL_Window **window;
   SDL_Event *event;
-} chip8_sdl;
+} chip8_sdl_t;
 
-void chip8_sdl_init(chip8_sdl *sdl, SDL_Window **window,
+void chip8_sdl_init(chip8_sdl_t *sdl, SDL_Window **window,
                     SDL_Renderer **renderer, SDL_Event *event);
-void chip8_sdl_clear_screen(chip8_sdl *sdl);
-void chip8_sdl_beep(chip8_sdl *sdl);
-void chip8_sdl_draw_pixels(chip8_sdl *sdl, const unsigned char *pixels);
-void chip8_sdl_destroy(chip8_sdl *sdl);
+void chip8_sdl_clear_screen(chip8_sdl_t *sdl);
+void chip8_sdl_beep(chip8_sdl_t *sdl);
+void chip8_sdl_draw_pixels(chip8_sdl_t *sdl, const unsigned char *pixels);
+void chip8_sdl_destroy(chip8_sdl_t *sdl);
 
 // SDL stuff
-void chip8_sdl_init(chip8_sdl *sdl, SDL_Window **window,
+void chip8_sdl_init(chip8_sdl_t *sdl, SDL_Window **window,
                     SDL_Renderer **renderer, SDL_Event *event) {
   SDL_Init(SDL_INIT_VIDEO);
   SDL_CreateWindowAndRenderer(WIDTH * SCALE, HEIGHT * SCALE, 0, window,
@@ -34,14 +34,14 @@ void chip8_sdl_init(chip8_sdl *sdl, SDL_Window **window,
   sdl->event = event;
 }
 
-void chip8_sdl_clear_screen(chip8_sdl *sdl) {
+void chip8_sdl_clear_screen(chip8_sdl_t *sdl) {
   SDL_SetRenderDrawColor(*sdl->renderer, 0, 0, 0, 0);
   SDL_RenderClear(*sdl->renderer);
 }
 
-void chip8_sdl_beep(chip8_sdl *sdl) { printf("Beep.\n"); }
+void chip8_sdl_beep(chip8_sdl_t *sdl) { printf("Beep.\n"); }
 
-void chip8_sdl_draw_pixels(chip8_sdl *sdl, const unsigned char *pixels) {
+void chip8_sdl_draw_pixels(chip8_sdl_t *sdl, const unsigned char *pixels) {
   SDL_Rect r;
   for (int row = 0; row < HEIGHT; ++row) {
     for (int col = 0; col < WIDTH; ++col) {
@@ -63,13 +63,13 @@ void chip8_sdl_draw_pixels(chip8_sdl *sdl, const unsigned char *pixels) {
   SDL_RenderPresent(*sdl->renderer);
 }
 
-void chip8_sdl_destroy(chip8_sdl *sdl) {
+void chip8_sdl_destroy(chip8_sdl_t *sdl) {
   SDL_DestroyRenderer(*sdl->renderer);
   SDL_DestroyWindow(*sdl->window);
   SDL_Quit();
 }
 
-void chip8_key_change(chip8 *chip, SDL_Keycode code, unsigned char v) {
+void chip8_key_change(chip8_t *chip, SDL_Keycode code, unsigned char v) {
   switch (code) {
     case SDLK_1:
       chip->keyboard[0x1] = v;
@@ -123,16 +123,16 @@ void chip8_key_change(chip8 *chip, SDL_Keycode code, unsigned char v) {
       break;
   }
 }
-void chip8_keydown(chip8 *chip, SDL_Keycode code) {
+void chip8_keydown(chip8_t *chip, SDL_Keycode code) {
   chip8_key_change(chip, code, 1);
 }
-void chip8_keyup(chip8 *chip, SDL_Keycode code) {
+void chip8_keyup(chip8_t *chip, SDL_Keycode code) {
   chip8_key_change(chip, code, 0);
 }
 
 typedef struct chip8_game {
-  chip8 *chip;
-  chip8_sdl *sdl;
+  chip8_t *chip;
+  chip8_sdl_t *sdl;
 } chip8_game;
 
 unsigned int render(unsigned int interval, void *g) {
@@ -143,7 +143,7 @@ unsigned int render(unsigned int interval, void *g) {
 }
 
 unsigned int process(unsigned int interval, void *chip) {
-  chip8 *c = (chip8 *)(chip);
+  chip8_t *c = (chip8_t *)(chip);
   chip8_step(c);
   return interval;
 }
@@ -157,11 +157,11 @@ int main(int argc, char **argv) {
   SDL_Renderer *renderer;
   SDL_Window *window;
 
-  chip8_sdl sdl;
+  chip8_sdl_t sdl;
   chip8_sdl_init(&sdl, &window, &renderer, &event);
   chip8_sdl_clear_screen(&sdl);
 
-  chip8 chip;
+  chip8_t chip;
   chip8_init(&chip);
   chip8_load_rom(&chip, argv[1]);
 

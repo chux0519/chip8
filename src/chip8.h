@@ -29,7 +29,7 @@ static const unsigned char fonts[80] = {
     0xF0, 0x80, 0xF0, 0x80, 0x80   // F
 };
 
-typedef struct chip8 {
+typedef struct chip8_s {
   unsigned char *memory;     // 4k
   unsigned char *registers;  // 16
   unsigned short opcode;
@@ -41,22 +41,23 @@ typedef struct chip8 {
   unsigned short sp;      // Stack Pointer
   unsigned char *keyboard;
   unsigned char *pixels;  // Pixel buffer, 0 for black, 1 for white
-} chip8;
+} chip8_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-// Initiate memory and registers
-void chip8_init(chip8 *chip);
+
+// Initiate
+void chip8_init(chip8_t *chip);
 
 // Load ROM
-void chip8_load_rom(chip8 *chip, const char *rom);
+void chip8_load_rom(chip8_t *chip, const char *rom);
 
 // Process CPU cycle
-void chip8_step(chip8 *chip);
+void chip8_step(chip8_t *chip);
 
 // Desctroy chip8
-void chip8_destroy(chip8 *chip);
+void chip8_destroy(chip8_t *chip);
 
 #ifdef __cplusplus
 }

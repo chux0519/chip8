@@ -19,7 +19,7 @@ void log_unsupported_opcode(const short opcode) {
   printf("Opcode 0x%X is not supported.\n", opcode);
 }
 
-void chip8_init(chip8 *chip) {
+void chip8_init(chip8_t *chip) {
   srand(time(0));
   chip->memory = (unsigned char *)xmalloc(sizeof(unsigned char) * MEM_SIZE);
   chip->registers =
@@ -47,7 +47,7 @@ void chip8_init(chip8 *chip) {
   for (int i = 0; i < 80; ++i) chip->memory[i] = fonts[i];
 }
 
-void chip8_load_rom(chip8 *chip, const char *rom) {
+void chip8_load_rom(chip8_t *chip, const char *rom) {
   FILE *f = NULL;
   f = fopen(rom, "rb");
   if (f == NULL) {
@@ -66,7 +66,7 @@ void chip8_load_rom(chip8 *chip, const char *rom) {
   }
 }
 
-void chip8_step(chip8 *chip) {
+void chip8_step(chip8_t *chip) {
   chip->opcode = chip->memory[chip->pc] << 8 | chip->memory[chip->pc + 1];
   const unsigned short opcode = chip->opcode;
   // printf("opcode: 0x%X\n", opcode);
@@ -325,7 +325,7 @@ void chip8_step(chip8 *chip) {
   if (chip->sound_timer > 0) --chip->sound_timer;
 }
 
-void chip8_destroy(chip8 *chip) {
+void chip8_destroy(chip8_t *chip) {
   free(chip->memory);
   free(chip->registers);
   free(chip->stack);
