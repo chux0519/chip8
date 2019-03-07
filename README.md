@@ -4,6 +4,8 @@ A simple implementation of the [chip8](https://en.wikipedia.org/wiki/CHIP-8). Yo
 
 See [example/chip8-sdl2.c](example/chip8-sdl2.c) for example.
 
+![example](pong.png)
+
 ## Quick start
 
 build:
